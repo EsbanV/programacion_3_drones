@@ -1,18 +1,3 @@
-import streamlit as st
-
-def render_avl_tree(root, freqs, level=0):
-    if root:
-        render_avl_tree(root.right, freqs, level + 1)
-        st.text("   " * level + f"{root.key} | Freq: {freqs.get(root.key, 0)}")
-        render_avl_tree(root.left, freqs, level + 1)
-
-def collect_routes(root, freqs, result):
-    if root:
-        collect_routes(root.left, freqs, result)
-        result.append((root.key, freqs.get(root.key, 0)))
-        collect_routes(root.right, freqs, result)
-    return result
-
 def hierarchy_pos(G, root=None, width=1., vert_gap=0.2, vert_loc=0, xcenter=0.5, pos=None, parent=None):
     
     if pos is None:
@@ -37,3 +22,4 @@ def hierarchy_pos(G, root=None, width=1., vert_gap=0.2, vert_loc=0, xcenter=0.5,
             pos = hierarchy_pos(G, children[0], width=dx, vert_gap=vert_gap,
                                 vert_loc=vert_loc - vert_gap, xcenter=xcenter, pos=pos, parent=root)
     return pos
+

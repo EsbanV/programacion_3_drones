@@ -5,123 +5,72 @@ class Node:
         self.right = None
         self.height = 0
 
-def height(N):
-    return -1 if N is None else N.height
+class AVL:
+    def __init__(self):
+        self.root = None
+        self.freqs = {}
 
-def get_balance(N):
-    return 0 if N is None else height(N.left) - height(N.right)
+    def insert(self, key):
+        self.root = self._insert(self.root, key)
+        self.freqs[key] = self.freqs.get(key, 0) + 1
 
-def right_rotate(y):
-    x = y.left
-    T2 = x.right
+    def _insert(self, node, key):
+        if node is None:
+            return Node(key)
+        if key < node.key:
+            node.left = self._insert(node.left, key)
+        elif key > node.key:
+            node.right = self._insert(node.right, key)
+        else:
+            return node
+        node.height = 1 + max(self._height(node.left), self._height(node.right))
+        return self._rebalance(node)
 
-    # Rotación
-    x.right = y
-    y.left = T2
+    def _height(self, n):
+        return n.height if n else 0
 
-    # Actualizar alturas
-    y.height = max(height(y.left), height(y.right)) + 1
-    x.height = max(height(x.left), height(x.right)) + 1
+    def _get_balance(self, n):
+        return self._height(n.left) - self._height(n.right) if n else 0
 
-    return x
-
-def left_rotate(x):
-    y = x.right
-    T2 = y.left
-
-    # Rotación
-    y.left = x
-    x.right = T2
-
-    # Actualizar alturas
-    x.height = max(height(x.left), height(x.right)) + 1
-    y.height = max(height(y.left), height(y.right)) + 1
-
-    return y
-
-def insert(node, key):
-    if node is None:
-        return Node(key)
-
-    if key < node.key:
-        node.left = insert(node.left, key)
-    elif key > node.key:
-        node.right = insert(node.right, key)
-    else:
+    def _rebalance(self, node):
+        balance = self._get_balance(node)
+        if balance > 1:
+            if self._get_balance(node.left) < 0:
+                node.left = self._left_rotate(node.left)
+            return self._right_rotate(node)
+        if balance < -1:
+            if self._get_balance(node.right) > 0:
+                node.right = self._right_rotate(node.right)
+            return self._left_rotate(node)
         return node
 
-    node.height = max(height(node.left), height(node.right)) + 1
-    balance = get_balance(node)
+    def _left_rotate(self, x):
+        y = x.right
+        T2 = y.left
+        y.left = x
+        x.right = T2
+        x.height = 1 + max(self._height(x.left), self._height(x.right))
+        y.height = 1 + max(self._height(y.left), self._height(y.right))
+        return y
 
-    if balance > 1 and key < node.left.key:
-        return right_rotate(node)
-    if balance < -1 and key > node.right.key:
-        return left_rotate(node)
-    if balance > 1 and key > node.left.key:
-        node.left = left_rotate(node.left)
-        return right_rotate(node)
-    if balance < -1 and key < node.right.key:
-        node.right = right_rotate(node.right)
-        return left_rotate(node)
+    def _right_rotate(self, y):
+        x = y.left
+        T2 = x.right
+        x.right = y
+        y.left = T2
+        y.height = 1 + max(self._height(y.left), self._height(y.right))
+        x.height = 1 + max(self._height(x.left), self._height(x.right))
+        return x
 
-    return node
+    def in_order(self):
+        result = []
+        def _in_order(n):
+            if n:
+                _in_order(n.left)
+                result.append((n.key, self.freqs.get(n.key, 0)))
+                _in_order(n.right)
+        _in_order(self.root)
+        return result
 
-def min_value_node(node):
-    current = node
-    while current.left:
-        current = current.left
-    return current
-
-def delete_node(root, key):
-    if root is None:
-        return root
-
-    if key < root.key:
-        root.left = delete_node(root.left, key)
-    elif key > root.key:
-        root.right = delete_node(root.right, key)
-    else:
-        if root.left is None or root.right is None:
-            root = root.left or root.right
-        else:
-            temp = min_value_node(root.right)
-            root.key = temp.key
-            root.right = delete_node(root.right, temp.key)
-
-    if root is None:
-        return root
-
-    root.height = max(height(root.left), height(root.right)) + 1
-    balance = get_balance(root)
-
-    if balance > 1 and get_balance(root.left) >= 0:
-        return right_rotate(root)
-    if balance > 1 and get_balance(root.left) < 0:
-        root.left = left_rotate(root.left)
-        return right_rotate(root)
-    if balance < -1 and get_balance(root.right) <= 0:
-        return left_rotate(root)
-    if balance < -1 and get_balance(root.right) > 0:
-        root.right = right_rotate(root.right)
-        return left_rotate(root)
-
-    return root
-
-def pre_order(root):
-    if root:
-        print(f"{root.key} ", end="")
-        pre_order(root.left)
-        pre_order(root.right)
-
-# Prueba
-if __name__ == "__main__":
-    root = None
-    for key in [9, 5, 10, 0, 6, 11, -1, 1, 2]:
-        root = insert(root, key)
-
-    print("Preorden del AVL construido:")
-    pre_order(root)
-
-    root = delete_node(root, 10)
-    print("\nPreorden luego de eliminar 10:")
-    pre_order(root)
+    def get_freq(self, key):
+        return self.freqs.get(key, 0)

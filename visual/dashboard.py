@@ -9,13 +9,16 @@ import streamlit as st
 from sim.init_simulation import generate_connected_graph
 from sim.simulation import bfs_shortest_path
 from visual.network_adapter import graph_to_networkx, get_spring_params, avl_to_nx_graph
-from visual.avl_visualizer import render_avl_tree, collect_routes, hierarchy_pos
-from tda.avl import insert, Node
+from visual.avl_visualizer import hierarchy_pos
+from tda.avl import AVL
+from tda.hash_map import Map
 from domain.client import Client
 from domain.order import Order
 
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
 
@@ -27,7 +30,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "General Statistics"
 ])
 
-# --- TAB 1: Sliders y botón ---
+# ------------------ TAB 1: Configuración y generación de simulación ------------------
 with tab1:
     st.markdown(
         """
@@ -50,15 +53,14 @@ with tab1:
     st.markdown("## ⚙️ Initialize Simulation")
     n_nodes = st.slider("Number of Nodes", min_value=10, max_value=150, value=15)
     m_edges = st.slider("Number of Edges", min_value=10, max_value=300, value=20)
-    n_orders = st.slider("Number of Orders", min_value=1, max_value=500, value=10)
-    autonomy = 50  # Puedes hacerlo slider también si quieres
+    n_orders = st.slider("Number of Orders", min_value=1, max_value=300, value=10)
+    autonomy = 50
 
     n_clients = int(n_nodes * 0.6)
     st.caption(f"Derived Client Nodes: {n_clients} (60% of {n_nodes})")
 
     if st.button("🟩 Start Simulation"):
         graph, vertices = generate_connected_graph(n_nodes, m_edges)
-        # Assign roles
         role_distribution = [("storage", 0.2), ("recharge", 0.2), ("client", 0.6)]
         roles = []
         for role, perc in role_distribution:
@@ -68,7 +70,6 @@ with tab1:
         random.shuffle(roles)
         node_roles = {v: roles[i] for i, v in enumerate(vertices)}
 
-        # Prepare clients (nuevos atributos completos)
         client_nodes = [v for v, r in node_roles.items() if r == "client"]
         recharge_nodes = [v for v, r in node_roles.items() if r == "recharge"]
         storage_nodes = [v for v, r in node_roles.items() if r == "storage"]
@@ -84,7 +85,6 @@ with tab1:
             for i, v in enumerate(client_nodes)
         ]
 
-        # Prepare orders
         orders = []
         for i in range(n_orders):
             src = random.choice(storage_nodes)
@@ -92,6 +92,14 @@ with tab1:
             client_obj = next((c for c in clients if c.node == tgt), None)
             client_id = client_obj.client_id if client_obj else None
             now = datetime.datetime.now().isoformat()
+
+            # Calcula la ruta y el costo aquí:
+            route_result = bfs_shortest_path(graph, src, tgt, autonomy, recharge_nodes)
+            if route_result and hasattr(route_result, "cost"):
+                route_cost = route_result.cost
+            else:
+                route_cost = None
+
             orders.append(Order(
                 order_id=f"O{str(i).zfill(3)}",
                 client=client_obj.name if client_obj else None,
@@ -102,14 +110,10 @@ with tab1:
                 priority=random.randint(0, 1),
                 created_at=now,
                 delivered_at=None,
-                route_cost=None
+                route_cost=route_cost
             ))
             if client_obj:
                 client_obj.total_orders += 1
-
-        # Guarda todo en session_state
-        if 'route_frequencies' not in st.session_state:
-            st.session_state['route_frequencies'] = {}
 
         st.session_state['n_nodes'] = n_nodes
         st.session_state['m_edges'] = m_edges
@@ -120,21 +124,21 @@ with tab1:
         st.session_state['node_roles'] = node_roles
         st.session_state['recharge_nodes'] = recharge_nodes
         st.session_state['storage_nodes'] = storage_nodes
+        st.session_state['node_visits'] = Map()  
         st.session_state['clients'] = clients
         st.session_state['orders'] = orders
-        st.session_state['avl_root'] = None
+        st.session_state['routes_avl'] = AVL()
         st.session_state['simulation_ready'] = True
         st.session_state['last_route_path'] = None
 
+# ------------------ TAB 2: Visualización del grafo y cálculo de rutas ------------------
 with tab2:
     st.markdown("<h2>🌍 Network Visualization</h2>", unsafe_allow_html=True)
     st.markdown("#### Drone Delivery Network")
 
     if st.session_state.get('simulation_ready'):
-        # CREA LAS COLUMNAS: Izquierda para el grafo, derecha para la UI de ruta
         col_grafo, col_ruta = st.columns([3, 1], gap="large")
 
-        # --- COLUMNA IZQUIERDA: Grafo ---
         with col_grafo:
             G = graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
             n_nodes = st.session_state['n_nodes']
@@ -152,6 +156,13 @@ with tab2:
             nx.draw(G, pos, ax=ax, node_color=color_map, with_labels=True)
             labels = nx.get_edge_attributes(G, "weight")
             nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, ax=ax, font_size=9)
+
+            legend_elements = [
+                mpatches.Patch(color="orange", label="Storage"),
+                mpatches.Patch(color="blue", label="Recharge"),
+                mpatches.Patch(color="green", label="Client")
+            ]
+            ax.legend(handles=legend_elements, loc="best", title="Node Roles")
             # --- Dibuja la ruta si existe ---
             route_path = st.session_state.get('last_route_path')
             if route_path and len(route_path) > 1:
@@ -167,13 +178,32 @@ with tab2:
                 )
             st.pyplot(fig)
 
-        # --- COLUMNA DERECHA: Panel de cálculo de ruta ---
         with col_ruta:
             st.markdown("### 📌 Calculate Route")
             options = list(st.session_state['graph'].vertices())
             node_roles = st.session_state['node_roles']
-            start = st.selectbox("Origin Node", options, format_func=lambda v: f"{v} ({node_roles.get(v, '-')})", key="route_start")
-            end = st.selectbox("Destination Node", options, format_func=lambda v: f"{v} ({node_roles.get(v, '-')})", key="route_end")
+            start = st.selectbox(
+                "Origin Node", options,
+                format_func=lambda v: f"{v} ({node_roles.get(v, '-')})",
+                key="route_start"
+            )
+            end = st.selectbox(
+                "Destination Node", options,
+                format_func=lambda v: f"{v} ({node_roles.get(v, '-')})",
+                key="route_end"
+            )
+
+            # Encuentra orden pendiente (si existe) para ese origen/destino
+            matching_order = None
+            for order in st.session_state.get('orders', []):
+                if (
+                    getattr(order, "origin", None) == str(start) and
+                    getattr(order, "destination", None) == str(end) and
+                    getattr(order, "status", None) == "pending"
+                ):
+                    matching_order = order
+                    break
+
             if st.button("🧭 Calculate Route"):
                 route = bfs_shortest_path(
                     st.session_state['graph'],
@@ -185,20 +215,28 @@ with tab2:
                 if route:
                     st.session_state['last_route_path'] = route.path
                     st.success(f"Route found: {route.path} (Cost: {route.cost})")
-
-                    # ---------- Guarda ruta en AVL y actualiza frecuencias ----------
                     route_key = " → ".join(str(v) for v in route.path)
-                    # Inicializa el dict de frecuencias si no existe
-                    if 'route_frequencies' not in st.session_state:
-                        st.session_state['route_frequencies'] = {}
-                    st.session_state['avl_root'] = insert(st.session_state.get('avl_root'), route_key)
-                    freqs = st.session_state['route_frequencies']
-                    freqs[route_key] = freqs.get(route_key, 0) + 1
+                    st.session_state['routes_avl'].insert(route_key)
+                    # Usar Map aquí para las visitas:
+                    visits = st.session_state['node_visits']
+                    for v in route.path:
+                        v_str = str(v)
+                        if v_str in visits:
+                            visits[v_str] += 1
+                        else:
+                            visits[v_str] = 1
+                st.rerun()
 
-                else:
-                    st.session_state['last_route_path'] = None
-                    st.error("No route found within drone autonomy and recharge constraints.")
+            if matching_order:
+                st.info(f"Pending order found for this route: {getattr(matching_order, 'order_id', '')} "
+                        f"(Priority: {getattr(matching_order, 'priority', '')})")
+                if st.button("✅ Complete Delivery"):
+                    matching_order.status = "completed"
+                    matching_order.delivered_at = datetime.datetime.now().isoformat()
+                    st.success(f"Order {getattr(matching_order, 'order_id', '')} marked as completed at {matching_order.delivered_at}")
+                    st.rerun()
 
+# ------------------ TAB 3: Visualización de clientes y órdenes ------------------
 with tab3:
     st.write("### Clients")
     if 'clients' in st.session_state:
@@ -210,41 +248,113 @@ with tab3:
         orders_list = [o.to_dict() for o in st.session_state['orders']]
         st.json(orders_list, expanded=False)
 
+# ------------------ TAB 4: Route Analytics y AVL ------------------
 with tab4:
-    st.markdown("### Most Frequent Routes")
+    st.markdown("## 🔁 Route Analytics")
+    avl_obj = st.session_state.get('routes_avl')
 
-    avl_root = st.session_state.get('avl_root')
-    freqs = st.session_state.get('route_frequencies', {})
-    if avl_root:
-        routes = collect_routes(avl_root, freqs, [])
-
-        # Ordena por frecuencia descendente y muestra solo los top N (ejemplo: 10)
-        routes = sorted(routes, key=lambda x: -x[1])
-        for idx, (path, freq) in enumerate(routes[:10], 1):
+    # --- Top rutas más frecuentes ---
+    st.markdown("### 🏅 Most Frequent Routes")
+    if avl_obj and avl_obj.root:
+        routes = avl_obj.in_order()
+        if routes:
+            routes = sorted(routes, key=lambda x: -x[1])
             st.markdown(
-                f"**{idx}.** Route hash: <span style='color:deepskyblue'>{path}</span> | "
-                f"<span style='color:orange'>Frequency: {freq}</span>",
-                unsafe_allow_html=True
+                "<div style='margin-bottom: 1em;'>"
+                + "".join(
+                    f"<div style='margin-bottom: 6px;'>"
+                    f"<b>{idx}.</b> <span style='color:deepskyblue'>{path}</span>"
+                    f" <span style='color:orange'>(freq: {freq})</span>"
+                    f"</div>"
+                    for idx, (path, freq) in enumerate(routes[:10], 1)
+                )
+                + "</div>",
+                unsafe_allow_html=True,
             )
+        else:
+            st.info("No routes registered yet.")
     else:
         st.info("No routes registered yet.")
 
-    st.markdown("### 🟩 AVL Tree Visualization")
-    avl_root = st.session_state.get('avl_root')
-    freqs = st.session_state.get('route_frequencies', {})
-    if avl_root:
-        # Crea grafo
-        G = avl_to_nx_graph(avl_root, freqs)
-        # Usa layout jerárquico
+    # --- Visualización AVL ---
+    st.markdown("### 🌳 AVL Tree Visualization")
+    if avl_obj and avl_obj.root:
+        G = avl_to_nx_graph(avl_obj.root, avl_obj.freqs)
         pos = hierarchy_pos(G)
         fig, ax = plt.subplots(figsize=(10, 4))
-        nx.draw(G, pos, with_labels=True, arrows=True,
-                node_size=1800, node_color="#a7d2ec", font_size=10, font_weight="bold", ax=ax)
+        nx.draw(
+            G, pos, with_labels=True, arrows=True,
+            node_size=1800, node_color="#a7d2ec",
+            font_size=10, font_weight="bold", ax=ax
+        )
         st.pyplot(fig)
     else:
         st.info("AVL Tree not available yet.")
 
-
+# ------------------ TAB 5: Estadísticas generales ------------------
 with tab5:
-    st.write("### General Statistics")
-    st.info("Here you can show bar charts and pie charts with visit counts and role proportions.")
+    st.markdown("## 📊 General Statistics")
+    st.markdown("### 🏆 Top Visited Nodes by Role")
+
+    node_visits = st.session_state.get('node_visits', Map())
+    node_roles = st.session_state.get('node_roles', {})
+
+
+    roles = {"client": [], "recharge": [], "storage": []}
+    visits_by_role = {"client": [], "recharge": [], "storage": []}
+
+    for v, role in node_roles.items():
+        v_str = str(v)
+        if role in roles:
+            roles[role].append(v_str)
+            visits_by_role[role].append(node_visits.get(v_str, 0))
+
+    col1, col2, col3 = st.columns(3, gap="large")
+
+    with col1:
+        st.markdown("##### 👤 Most Visited Clients")
+        fig1 = go.Figure([go.Bar(
+            x=roles["client"],
+            y=visits_by_role["client"],
+            marker_color="lightskyblue"
+        )])
+        fig1.update_layout(xaxis_title="Client Node", yaxis_title="Visits", showlegend=False)
+        st.plotly_chart(fig1, use_container_width=True, key="clients_bar")
+
+    with col2:
+        st.markdown("##### 🟩 Most Visited Recharge Stations")
+        fig2 = go.Figure([go.Bar(
+            x=roles["recharge"],
+            y=visits_by_role["recharge"],
+            marker_color="mediumseagreen"
+        )])
+        fig2.update_layout(xaxis_title="Recharge Node", yaxis_title="Visits", showlegend=False)
+        st.plotly_chart(fig2, use_container_width=True, key="recharge_bar")
+
+    with col3:
+        st.markdown("##### 📦 Most Visited Storage Nodes")
+        fig3 = go.Figure([go.Bar(
+            x=roles["storage"],
+            y=visits_by_role["storage"],
+            marker_color="orange"
+        )])
+        fig3.update_layout(xaxis_title="Storage Node", yaxis_title="Visits", showlegend=False)
+        st.plotly_chart(fig3, use_container_width=True, key="storage_bar")
+
+    # --- Pie chart de proporciones ---
+    st.markdown("### 🥧 Node Role Proportion")
+    n_storage = len(roles["storage"])
+    n_recharge = len(roles["recharge"])
+    n_client = len(roles["client"])
+
+    fig_pie = go.Figure(
+        go.Pie(
+            labels=["Storage Nodes", "Recharge Nodes", "Client Nodes"],
+            values=[n_storage, n_recharge, n_client],
+            marker_colors=["orange", "mediumseagreen", "lightskyblue"],
+            hole=0.3,
+            textinfo="label+percent"
+        )
+    )
+    fig_pie.update_layout(showlegend=True)
+    st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
