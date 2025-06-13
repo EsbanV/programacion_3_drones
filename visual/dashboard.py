@@ -1,7 +1,7 @@
-import tkinter as tk
-from tkinter import ttk
-from visual.statistics import GeneralStatisticsTab
-
+import sys
+import os
+import random
+import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import streamlit as st
