@@ -1,10 +1,10 @@
 class Client:
     def __init__(self, client_id, name, type_, total_orders=0, node=None):
-        self.client_id = client_id    # Ejemplo: "C017"
-        self.name = name              # Ejemplo: "Client17"
-        self.type = type_             # Ejemplo: "premium" o "normal"
-        self.total_orders = total_orders  # Ejemplo: 1
-        self.node = node              # Mantiene compatibilidad con el nodo original (opcional)
+        self.client_id = client_id
+        self.name = name
+        self.type = type_
+        self.total_orders = total_orders
+        self.node = node
 
     def __repr__(self):
         return (f"Client(client_id={self.client_id}, name={self.name}, "

@@ -5,10 +5,10 @@ import datetime
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 import streamlit as st
-from sim.init_simulation import generate_connected_graph
-from sim.simulation import bfs_shortest_path
-from visual.network_adapter import graph_to_networkx, get_spring_params, avl_to_nx_graph
-from visual.avl_visualizer import hierarchy_pos
+from sim.init_simulation import InitSimulation
+from sim.simulation import Simulation
+from visual.network_adapter import NetworkAdapter
+from visual.avl_visualizer import AVL_visualizer
 from tda.avl import AVL
 from tda.hash_map import Map
 from domain.client import Client
@@ -59,7 +59,7 @@ with tab1:
     st.caption(f"Derived Client Nodes: {n_clients} (60% of {n_nodes})")
 
     if st.button("🟩 Start Simulation"):
-        graph, vertices = generate_connected_graph(n_nodes, m_edges)
+        graph, vertices = InitSimulation.generate_connected_graph(n_nodes, m_edges)
         role_distribution = [("storage", 0.2), ("recharge", 0.2), ("client", 0.6)]
         roles = []
         for role, perc in role_distribution:
@@ -93,7 +93,7 @@ with tab1:
             now = datetime.datetime.now().isoformat()
 
             # Calcula la ruta y el costo aquí:
-            route_result = bfs_shortest_path(graph, src, tgt, autonomy, recharge_nodes)
+            route_result = Simulation.bfs_shortest_path(graph, src, tgt, autonomy, recharge_nodes)
             if route_result and hasattr(route_result, "cost"):
                 route_cost = route_result.cost
             else:
@@ -139,9 +139,9 @@ with tab2:
         col_grafo, col_ruta = st.columns([3, 1], gap="large")
 
         with col_grafo:
-            G = graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
+            G = NetworkAdapter.graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
             n_nodes = st.session_state['n_nodes']
-            spring_params = get_spring_params(n_nodes)
+            spring_params = NetworkAdapter.get_spring_params(n_nodes)
             pos = nx.spring_layout(
                 G,
                 k=spring_params["k"],
@@ -203,7 +203,7 @@ with tab2:
                     break
 
             if st.button("🧭 Calculate Route"):
-                route = bfs_shortest_path(
+                route = Simulation.bfs_shortest_path(
                     st.session_state['graph'],
                     start,
                     end,
@@ -284,8 +284,8 @@ with tab4:
     # --- Visualización AVL ---
     st.markdown("### 🌳 AVL Tree Visualization")
     if avl_obj and avl_obj.root:
-        G = avl_to_nx_graph(avl_obj.root, avl_obj.freqs)
-        pos = hierarchy_pos(G)
+        G = NetworkAdapter.avl_to_nx_graph(avl_obj.root, avl_obj.freqs)
+        pos = AVL_visualizer.hierarchy_pos(G)
         fig, ax = plt.subplots(figsize=(10, 4))
         nx.draw(
             G, pos, with_labels=True, arrows=True,
