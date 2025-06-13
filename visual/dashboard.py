@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-from visual.statics import GeneralStatisticsTab
+from visual.statistics import GeneralStatisticsTab
 
 class Dashboard(ttk.Notebook):
     def __init__(self, parent):
