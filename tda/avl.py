@@ -1,35 +1,9 @@
 class Node:
     def __init__(self, key):
-        self._key = key
-        self._left = None
-        self._right = None
-        self._height = 0
-
-    @property
-    def key(self):
-        return self._key
-
-    @property
-    def left(self):
-        return self._left
-
-    @property
-    def right(self):
-        return self._right
-
-    @property
-    def height(self):
-        return self._height
-
-    # Opcional: métodos internos (protegidos) para el árbol, NO como setters públicos.
-    def _set_left(self, node):
-        self._left = node
-
-    def _set_right(self, node):
-        self._right = node
-
-    def _set_height(self, h):
-        self._height = h
+        self.key = key
+        self.left = None
+        self.right = None
+        self.height = 0
 
 def height(N):
     return -1 if N is None else N.height
@@ -79,7 +53,6 @@ def insert(node, key):
     node.height = max(height(node.left), height(node.right)) + 1
     balance = get_balance(node)
 
-    # Casos de desbalanceo
     if balance > 1 and key < node.left.key:
         return right_rotate(node)
     if balance < -1 and key > node.right.key:
