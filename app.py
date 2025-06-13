@@ -103,18 +103,10 @@ with tab1:
     if validation_messages:
         for msg in validation_messages:
             st.warning(msg)
-    
-    # Botón de inicio de simulación
-    st.button("🏁 Start Simulation", disabled=not valid_simulation)
-
-with tab2:
-    st.header("👁 Visualizar red:")
-    st.header("👁 Visualizar red:")
-    if 'graph_data' not in st.session_state or st.session_state['last_n'] != n_nodes or st.session_state['last_e'] != n_edges:
+            
+    if st.button("🏁 Start Simulation", disabled=not valid_simulation):
         G = generate_random_tree(n_nodes, seed=42)
-        
         extra_edges_needed = n_edges - (n_nodes - 1)
-
         possible_edges = list(nx.non_edges(G))
         random.shuffle(possible_edges)
         for i in range(min(extra_edges_needed, len(possible_edges))):
@@ -134,15 +126,12 @@ with tab2:
         nodes_list = list(G.nodes())
         random.seed(42)
         random.shuffle(nodes_list)
-        n_storage = int(0.2 * n_nodes)
-        n_recharge = int(0.2 * n_nodes)
-        n_client = n_nodes - n_storage - n_recharge
 
         roles = {}
         for i, node in enumerate(nodes_list):
-            if i < n_storage:
+            if i < storage_nodes:
                 roles[node] = 'storage'
-            elif i < n_storage + n_recharge:
+            elif i < storage_nodes + recharge_nodes:
                 roles[node] = 'recharge'
             else:
                 roles[node] = 'client'
@@ -151,50 +140,49 @@ with tab2:
         st.session_state['graph_data'] = G
         st.session_state['last_n'] = n_nodes
         st.session_state['last_e'] = n_edges
+        st.session_state['simulation_started'] = True
 
-    G = st.session_state['graph_data']
-    positions = nx.get_node_attributes(G, 'pos')
-    roles = nx.get_node_attributes(G, 'role')
+with tab2:
+    st.header("👁 Visualizar red:")
+    if st.session_state.get('simulation_started', False):
+        G = st.session_state['graph_data']
+        positions = nx.get_node_attributes(G, 'pos')
+        roles = nx.get_node_attributes(G, 'role')
 
-    col1, col2 = st.columns([3, 1])
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            st.header("Ruta más corta")
+            origin = st.selectbox("Nodo origen", list(G.nodes()))
+            destination = st.selectbox("Nodo destino", list(G.nodes()))
+            calcular = st.button("Calcular ruta")
 
-    with col2:
-        st.header("Ruta más corta")
-        origin = st.selectbox("Nodo origen", list(G.nodes()))
-        destination = st.selectbox("Nodo destino", list(G.nodes()))
-        calcular = st.button("Calcular ruta")
+        path_nodes = []
+        path_edges = []
+        path_cost = 0
 
-    path_nodes = []
-    path_edges = []
-    path_cost = 0
+        if calcular:
+            try:
+                path_nodes = nx.shortest_path(G, source=origin, target=destination, weight='weight')
+                path_edges = list(zip(path_nodes[:-1], path_nodes[1:]))
+                path_cost = nx.shortest_path_length(G, source=origin, target=destination, weight='weight')
+                st.success(f"Ruta: {' -> '.join(path_nodes)}, costo: {path_cost}")
+            except nx.NetworkXNoPath:
+                st.error("No existe una ruta entre los nodos seleccionados.")
 
-    if calcular:
-        try:
-            path_nodes = nx.shortest_path(G, source=origin, target=destination, weight='weight')
-            path_edges = list(zip(path_nodes[:-1], path_nodes[1:]))
-            path_cost = nx.shortest_path_length(G, source=origin, target=destination, weight='weight')
-            st.success(f"Ruta: {' -> '.join(path_nodes)}, costo: {path_cost}")
-        except nx.NetworkXNoPath:
-            st.error("No existe una ruta entre los nodos seleccionados.")
+        with col1:
+            plt.figure(figsize=(10, 8))
+            color_map = {'client': 'green', 'storage': 'red', 'recharge': 'blue'}
+            node_colors = [color_map[roles.get(node, 'client')] for node in G.nodes()]
+            edge_colors = ['red' if (u, v) in path_edges or (v, u) in path_edges else 'black' for u, v in G.edges()]
+            labels = nx.get_edge_attributes(G, 'weight')
 
-    with col1:
-        plt.figure(figsize=(10, 8))
+            nx.draw_networkx_nodes(G, pos=positions, node_color=node_colors, node_size=800)
+            nx.draw_networkx_edges(G, pos=positions, edge_color=edge_colors, width=2)
+            nx.draw_networkx_labels(G, pos=positions, font_size=10, font_weight='bold')
+            nx.draw_networkx_edge_labels(G, pos=positions, edge_labels=labels, font_size=8)
+            plt.axis('off')
+            st.pyplot(plt)
 
-        color_map = {
-            'client': 'green',
-            'storage': 'red',
-            'recharge': 'blue'
-        }
-        node_colors = [color_map[roles.get(node, 'client')] for node in G.nodes()]
-        edge_colors = ['red' if (u, v) in path_edges or (v, u) in path_edges else 'black' for u, v in G.edges()]
-        labels = nx.get_edge_attributes(G, 'weight')
-
-        nx.draw_networkx_nodes(G, pos=positions, node_color=node_colors, node_size=800)
-        nx.draw_networkx_edges(G, pos=positions, edge_color=edge_colors, width=2)
-        nx.draw_networkx_labels(G, pos=positions, font_size=10, font_weight='bold')
-        nx.draw_networkx_edge_labels(G, pos=positions, edge_labels=labels, font_size=8)
-        plt.axis('off')
-        st.pyplot(plt)
 with tab3:
     st.header("🌐 Clientes y ordenes:")
 
