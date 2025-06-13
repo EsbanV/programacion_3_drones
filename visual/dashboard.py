@@ -192,7 +192,6 @@ with tab2:
                 key="route_end"
             )
 
-            # Encuentra orden pendiente (si existe) para ese origen/destino
             matching_order = None
             for order in st.session_state.get('orders', []):
                 if (
@@ -234,6 +233,8 @@ with tab2:
                     matching_order.delivered_at = datetime.datetime.now().isoformat()
                     st.success(f"Order {getattr(matching_order, 'order_id', '')} marked as completed at {matching_order.delivered_at}")
                     st.rerun()
+    else:
+        st.info("No nodes registered yet.")
 
 # ------------------ TAB 3: Visualización de clientes y órdenes ------------------
 with tab3:
@@ -241,11 +242,16 @@ with tab3:
     if 'clients' in st.session_state:
         clients_list = [c.to_dict() for c in st.session_state['clients']]
         st.json(clients_list, expanded=False)
+    else:
+        st.info("No clients registered yet.")
 
     st.write("### Orders")
     if 'orders' in st.session_state:
         orders_list = [o.to_dict() for o in st.session_state['orders']]
         st.json(orders_list, expanded=False)
+
+    else:
+        st.info("No orders registered yet.")
 
 # ------------------ TAB 4: Route Analytics y AVL ------------------
 with tab4:
@@ -295,65 +301,83 @@ with tab5:
     st.markdown("## 📊 General Statistics")
     st.markdown("### 🏆 Top Visited Nodes by Role")
 
-    node_visits = st.session_state.get('node_visits', Map())
-    node_roles = st.session_state.get('node_roles', {})
+    node_visits = st.session_state.get('node_visits', None)
+    node_roles = st.session_state.get('node_roles', None)
 
+    if not node_visits or not node_roles or len(node_roles) == 0:
+        st.info("No node data available. Run the simulation and generate at least one route.")
+    else:
+        roles = {"client": [], "recharge": [], "storage": []}
+        visits_by_role = {"client": [], "recharge": [], "storage": []}
 
-    roles = {"client": [], "recharge": [], "storage": []}
-    visits_by_role = {"client": [], "recharge": [], "storage": []}
+        for v, role in node_roles.items():
+            v_str = str(v)
+            if role in roles:
+                roles[role].append(v_str)
+                visits_by_role[role].append(node_visits.get(v_str, 0))
 
-    for v, role in node_roles.items():
-        v_str = str(v)
-        if role in roles:
-            roles[role].append(v_str)
-            visits_by_role[role].append(node_visits.get(v_str, 0))
+        no_clients = len(roles["client"]) == 0
+        no_recharge = len(roles["recharge"]) == 0
+        no_storage = len(roles["storage"]) == 0
 
-    col1, col2, col3 = st.columns(3, gap="large")
+        col1, col2, col3 = st.columns(3, gap="large")
 
-    with col1:
-        st.markdown("##### 👤 Most Visited Clients")
-        fig1 = go.Figure([go.Bar(
-            x=roles["client"],
-            y=visits_by_role["client"],
-            marker_color="lightskyblue"
-        )])
-        fig1.update_layout(xaxis_title="Client Node", yaxis_title="Visits", showlegend=False)
-        st.plotly_chart(fig1, use_container_width=True, key="clients_bar")
+        with col1:
+            st.markdown("##### 👤 Most Visited Clients")
+            if no_clients or all(v == 0 for v in visits_by_role["client"]):
+                st.info("No client node visits recorded.")
+            else:
+                fig1 = go.Figure([go.Bar(
+                    x=roles["client"],
+                    y=visits_by_role["client"],
+                    marker_color="lightskyblue"
+                )])
+                fig1.update_layout(xaxis_title="Client Node", yaxis_title="Visits", showlegend=False)
+                st.plotly_chart(fig1, use_container_width=True, key="clients_bar")
 
-    with col2:
-        st.markdown("##### 🟩 Most Visited Recharge Stations")
-        fig2 = go.Figure([go.Bar(
-            x=roles["recharge"],
-            y=visits_by_role["recharge"],
-            marker_color="mediumseagreen"
-        )])
-        fig2.update_layout(xaxis_title="Recharge Node", yaxis_title="Visits", showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True, key="recharge_bar")
+        with col2:
+            st.markdown("##### 🟩 Most Visited Recharge Stations")
+            if no_recharge or all(v == 0 for v in visits_by_role["recharge"]):
+                st.info("No recharge station visits recorded.")
+            else:
+                fig2 = go.Figure([go.Bar(
+                    x=roles["recharge"],
+                    y=visits_by_role["recharge"],
+                    marker_color="mediumseagreen"
+                )])
+                fig2.update_layout(xaxis_title="Recharge Node", yaxis_title="Visits", showlegend=False)
+                st.plotly_chart(fig2, use_container_width=True, key="recharge_bar")
 
-    with col3:
-        st.markdown("##### 📦 Most Visited Storage Nodes")
-        fig3 = go.Figure([go.Bar(
-            x=roles["storage"],
-            y=visits_by_role["storage"],
-            marker_color="orange"
-        )])
-        fig3.update_layout(xaxis_title="Storage Node", yaxis_title="Visits", showlegend=False)
-        st.plotly_chart(fig3, use_container_width=True, key="storage_bar")
+        with col3:
+            st.markdown("##### 📦 Most Visited Storage Nodes")
+            if no_storage or all(v == 0 for v in visits_by_role["storage"]):
+                st.info("No storage node visits recorded.")
+            else:
+                fig3 = go.Figure([go.Bar(
+                    x=roles["storage"],
+                    y=visits_by_role["storage"],
+                    marker_color="orange"
+                )])
+                fig3.update_layout(xaxis_title="Storage Node", yaxis_title="Visits", showlegend=False)
+                st.plotly_chart(fig3, use_container_width=True, key="storage_bar")
 
-    # --- Pie chart de proporciones ---
-    st.markdown("### 🥧 Node Role Proportion")
-    n_storage = len(roles["storage"])
-    n_recharge = len(roles["recharge"])
-    n_client = len(roles["client"])
+        # --- Pie chart de proporciones ---
+        st.markdown("### 🥧 Node Role Proportion")
+        n_storage = len(roles["storage"])
+        n_recharge = len(roles["recharge"])
+        n_client = len(roles["client"])
 
-    fig_pie = go.Figure(
-        go.Pie(
-            labels=["Storage Nodes", "Recharge Nodes", "Client Nodes"],
-            values=[n_storage, n_recharge, n_client],
-            marker_colors=["orange", "mediumseagreen", "lightskyblue"],
-            hole=0.3,
-            textinfo="label+percent"
-        )
-    )
-    fig_pie.update_layout(showlegend=True)
-    st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
+        if n_storage == 0 and n_recharge == 0 and n_client == 0:
+            st.info("No nodes to display in pie chart.")
+        else:
+            fig_pie = go.Figure(
+                go.Pie(
+                    labels=["Storage Nodes", "Recharge Nodes", "Client Nodes"],
+                    values=[n_storage, n_recharge, n_client],
+                    marker_colors=["orange", "mediumseagreen", "lightskyblue"],
+                    hole=0.3,
+                    textinfo="label+percent"
+                )
+            )
+            fig_pie.update_layout(showlegend=True)
+            st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
