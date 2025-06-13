@@ -1,7 +1,6 @@
-import sys
-import os
-import random
-import datetime
+import tkinter as tk
+from tkinter import ttk
+from visual.statistics import GeneralStatisticsTab
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
