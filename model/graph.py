@@ -59,16 +59,3 @@ class Graph:
     def incident_edges(self, v, outgoing=True):
         adj = self._outgoing if outgoing else self._incoming
         return adj[v].values()
-
-    @property
-    def vertices(self):
-        """Devuelve una vista inmutable de los vértices."""
-        return tuple(self._outgoing.keys())
-
-    @property
-    def edges(self):
-        """Devuelve una vista inmutable de las aristas."""
-        seen = set()
-        for map in self._outgoing.values():
-            seen.update(map.values())
-        return tuple(seen)

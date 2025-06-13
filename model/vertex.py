@@ -1,25 +1,20 @@
 class Vertex:
-    """Lightweight vertex structure for a graph."""
     __slots__ = '_element'
 
     def __init__(self, element):
-        """Do not call constructor directly. Use Graph's insert_vertex(element)."""
         self._element = element
 
     def element(self):
-        """Return element associated with this vertex."""
         return self._element
 
     def __hash__(self):
-        return hash(id(self))
+        return hash(self._element)
+
+    def __eq__(self, other):
+        return isinstance(other, Vertex) and self._element == other._element
 
     def __str__(self):
         return str(self._element)
 
     def __repr__(self):
         return f"Vertex({self._element})"
-    
-    @property
-    def element(self):
-        """Getter seguro para el elemento."""
-        return self._element
