@@ -59,3 +59,34 @@ class Graph:
     def incident_edges(self, v, outgoing=True):
         adj = self._outgoing if outgoing else self._incoming
         return adj[v].values()
+
+
+    def kruskal_mst(self):
+        parent = {}
+
+        def find(v):
+            while parent[v] != v:
+                parent[v] = parent[parent[v]]
+                v = parent[v]
+            return v
+
+        def union(u, v):
+            root_u, root_v = find(u), find(v)
+            if root_u != root_v:
+                parent[root_v] = root_u
+                return True
+            return False
+
+        for vertex in self.vertices():
+            parent[vertex] = vertex
+
+        mst_edges = []
+        sorted_edges = sorted(self.edges(), key=lambda e: e.element())
+
+        for edge in sorted_edges:
+            u, v = edge._origin, edge._destination  # Accede a los atributos directamente
+            if union(u, v):
+                mst_edges.append(edge)
+
+        return mst_edges
+

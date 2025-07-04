@@ -23,3 +23,7 @@ class Edge:
 
     def __repr__(self):
         return f"Edge({self._origin}, {self._destination}, {self._element})"
+    
+    @property
+    def weight(self):
+        return self._element

@@ -142,18 +142,22 @@ with tab2:
         col_grafo, col_ruta = st.columns([3, 1], gap="large")
 
         with col_grafo:
-            # --- NUEVO: Mapa interactivo con folium ---
-            G = NetworkAdapter.graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
+            G = NetworkAdapter.graph_to_networkx(
+                st.session_state['graph'], st.session_state['node_roles']
+            )
             node_roles = st.session_state['node_roles']
             route_path = st.session_state.get('last_route_path')
-            # Genera el mapa interactivo usando MapAdapter
+            mst_edges = st.session_state.get("mst_edges")
+
+            # Adaptador para renderizar en el mapa
             fmap = MapAdapter.network_to_folium(
                 G,
                 node_roles,
-                route_path=route_path
+                route_path=route_path,
+                mst_edges=mst_edges
             )
             st_data = st_folium(fmap, width=700, height=500)
-            # --- Fin NUEVO ---
+
 
         with col_ruta:
             st.markdown("### 📌 Calculate Route")
@@ -170,17 +174,8 @@ with tab2:
                 key="route_end"
             )
 
-            matching_order = None
-            for order in st.session_state.get('orders', []):
-                if (
-                    getattr(order, "origin", None) == str(start) and
-                    getattr(order, "destination", None) == str(end) and
-                    getattr(order, "status", None) == "pending"
-                ):
-                    matching_order = order
-                    break
-
-            if st.button("🧭 Calculate Route"):
+            # Botón para calcular ruta
+            if st.button("🧭 Calculate Route", key="route"):
                 route = Simulation.bfs_shortest_path(
                     st.session_state['graph'],
                     start,
@@ -193,7 +188,6 @@ with tab2:
                     st.success(f"Route found: {route.path} (Cost: {route.cost})")
                     route_key = " → ".join(str(v) for v in route.path)
                     st.session_state['routes_avl'].insert(route_key)
-                    # Usar Map aquí para las visitas:
                     visits = st.session_state['node_visits']
                     for v in route.path:
                         v_str = str(v)
@@ -203,16 +197,22 @@ with tab2:
                             visits[v_str] = 1
                 st.rerun()
 
-            if matching_order:
-                st.info(f"Pending order found for this route: {getattr(matching_order, 'order_id', '')} "
-                        f"(Priority: {getattr(matching_order, 'priority', '')})")
-                if st.button("✅ Complete Delivery"):
-                    matching_order.status = "completed"
-                    matching_order.delivered_at = datetime.datetime.now().isoformat()
-                    st.success(f"Order {getattr(matching_order, 'order_id', '')} marked as completed at {matching_order.delivered_at}")
+            # Botón para mostrar MST (Kruskal) justo debajo
+            if st.button("🌲 Show MST (Kruskal)", key="mst"):
+                grafo = st.session_state['graph']
+                mst = grafo.kruskal_mst()
+                mst_pairs = [(str(edge._origin.element()), str(edge._destination.element())) for edge in mst]
+                st.session_state['mst_edges'] = mst_pairs
+                st.success("Minimum Spanning Tree (MST) calculated and displayed.")
+                st.rerun()
+
+            if st.session_state.get('mst_edges'):
+                if st.button("Hide MST", key="hide_mst"):
+                    st.session_state['mst_edges'] = None
+                    st.success("MST hidden. Showing full graph.")
                     st.rerun()
-    else:
-        st.info("No nodes registered yet.")
+
+
 
 # ------------------ TAB 3: Visualización de clientes y órdenes ------------------
 with tab3:
