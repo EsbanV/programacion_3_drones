@@ -360,8 +360,3 @@ with tab5:
             fig_pie.update_layout(showlegend=True)
             # Usa una sola vez el key="roles_pie" y elimina duplicados
             st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
-        # --- Pie chart de proporciones ---
-        st.markdown("### 🥧 Node Role Proportion")
-        n_storage = len(roles["storage"])
-        n_recharge = len(roles["recharge"])
-        n_client = len(roles["client"])
