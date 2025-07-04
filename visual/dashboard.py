@@ -19,8 +19,11 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import plotly.graph_objects as go
 import folium
+from visual.report_generator import ReportGenerator
+from visual.map.map_adapter import MapAdapter
 from streamlit_folium import st_folium
-from map_adapter import MapAdapter
+from sim.kruskal import kruskal_mst  # Asegúrate de tenerlo implementado como antes
+from api.main import sync_state_from_streamlit 
 
 st.set_page_config(layout="wide")
 
@@ -132,42 +135,56 @@ with tab1:
         st.session_state['routes_avl'] = AVL()
         st.session_state['simulation_ready'] = True
         st.session_state['last_route_path'] = None
+        sync_state_from_streamlit()
 
 # ------------------ TAB 2: Visualización del grafo y cálculo de rutas ------------------
 with tab2:
     st.markdown("<h2>🌍 Network Visualization</h2>", unsafe_allow_html=True)
     st.markdown("#### Drone Delivery Network")
 
+    if 'mst_visible' not in st.session_state:
+        st.session_state['mst_visible'] = False
+
     if st.session_state.get('simulation_ready'):
         col_grafo, col_ruta = st.columns([3, 1], gap="large")
 
         with col_grafo:
             # --- NUEVO: Mapa interactivo con folium ---
-            G = NetworkAdapter.graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
-            node_roles = st.session_state['node_roles']
-            route_path = st.session_state.get('last_route_path')
-            # Genera el mapa interactivo usando MapAdapter
+            G = NetworkAdapter.graph_to_networkx(
+                st.session_state['graph'], st.session_state['node_roles']
+            )
+            mst_edges = st.session_state.get('mst_edges', None)
+
             fmap = MapAdapter.network_to_folium(
                 G,
-                node_roles,
-                route_path=route_path
+                st.session_state['node_roles'],
+                route_path=st.session_state.get('last_route_path', None),
+                mst_edges=st.session_state.get('mst_edges', None),
+                graph=st.session_state['graph']   # <--- TU grafo de clases propias
             )
-            st_data = st_folium(fmap, width=700, height=500)
+            st_folium(fmap, width=700, height=500)
             # --- Fin NUEVO ---
 
         with col_ruta:
             st.markdown("### 📌 Calculate Route")
-            options = list(st.session_state['graph'].vertices())
+            # Obtén los roles de nodos (Vertex -> str "storage"/"client"/etc)
             node_roles = st.session_state['node_roles']
+
+            # Filtra solo nodos de almacenamiento para origen
+            storage_nodes = [v for v, role in node_roles.items() if role == "storage"]
+
+            # Filtra solo nodos de cliente para destino
+            client_nodes = [v for v, role in node_roles.items() if role == "client"]
+
             start = st.selectbox(
-                "Origin Node", options,
-                format_func=lambda v: f"{v} ({node_roles.get(v, '-')})",
-                key="route_start"
+                "Origin Node (Solo almacén)",
+                storage_nodes,
+                format_func=lambda v: f"{v} (Almacenamiento)"
             )
             end = st.selectbox(
-                "Destination Node", options,
-                format_func=lambda v: f"{v} ({node_roles.get(v, '-')})",
-                key="route_end"
+                "Destination Node (Solo cliente)",
+                client_nodes,
+                format_func=lambda v: f"{v} (Cliente)"
             )
 
             matching_order = None
@@ -181,13 +198,30 @@ with tab2:
                     break
 
             if st.button("🧭 Calculate Route"):
-                route = Simulation.bfs_shortest_path(
+                path, cost = Simulation.get_shortest_path(
                     st.session_state['graph'],
                     start,
                     end,
                     st.session_state['autonomy'],
                     st.session_state['recharge_nodes']
                 )
+                if path and len(path) > 1:
+                    st.session_state['last_route_path'] = path
+                    st.success(f"Route found: {[str(v) for v in path]} (Cost: {cost})")
+                    # Aquí actualizas los rankings y la AVL, etc.
+                    route_key = " → ".join(str(v) for v in path)
+                    st.session_state['routes_avl'].insert(route_key)
+                    visits = st.session_state['node_visits']
+                    for v in path:
+                        v_str = str(v)
+                        if v_str in visits:
+                            visits[v_str] += 1
+                        else:
+                            visits[v_str] = 1
+                else:
+                    st.error("No route found (autonomy or recharge limit reached).")
+                st.rerun()
+
                 if route:
                     st.session_state['last_route_path'] = route.path
                     st.success(f"Route found: {route.path} (Cost: {route.cost})")
@@ -202,6 +236,24 @@ with tab2:
                         else:
                             visits[v_str] = 1
                 st.rerun()
+
+            st.markdown("### 🌲 Árbol de Expansión Mínima (MST)")
+
+            if st.session_state.get('simulation_ready'):
+                # ... (tu visualización de grafo actual)
+                
+                if st.button("🌲 Mostrar/Ocultar MST"):
+                    if st.session_state['mst_visible']:
+                        # Oculta el MST
+                        st.session_state['mst_visible'] = False
+                        st.session_state['mst_edges'] = None
+                    else:
+                        # Calcula y muestra el MST
+                        mst_edges = kruskal_mst(st.session_state['graph'])
+                        # Si usas strings para nodos en NetworkX:
+                        st.session_state['mst_edges'] = [(str(e.endpoints()[0]), str(e.endpoints()[1])) for e in mst_edges]
+                        st.session_state['mst_visible'] = True
+                    st.rerun()
 
             if matching_order:
                 st.info(f"Pending order found for this route: {getattr(matching_order, 'order_id', '')} "
@@ -271,8 +323,68 @@ with tab4:
             font_size=10, font_weight="bold", ax=ax
         )
         st.pyplot(fig)
+
+        st.markdown("### 📄 Generar Informe PDF")
+
+    # Recopila los datos necesarios del sistema:
+    # 1. Estadísticas generales
+    stats = {
+        "Nodos": st.session_state.get("n_nodes", 0),
+        "Aristas": st.session_state.get("m_edges", 0),
+        "Órdenes totales": len(st.session_state.get("orders", [])),
+        "Rutas registradas": len(st.session_state.get("routes_avl", AVL()).in_order()),
+        "Clientes": len(st.session_state.get("clients", [])),
+    }
+
+    # 2. Pedidos y clientes
+    orders = st.session_state.get("orders", [])
+    clients = st.session_state.get("clients", [])
+
+    # 3. Rutas frecuentes (formato: lista de (ruta, frecuencia))
+    avl_obj = st.session_state.get('routes_avl')
+    routes = []
+    if avl_obj and avl_obj.root:
+        routes = sorted(avl_obj.in_order(), key=lambda x: -x[1])
+
+    # 4. Nodos más usados (diccionario {str(node): visitas})
+    node_visits_map = st.session_state.get("node_visits", {})
+    if hasattr(node_visits_map, "items"):  # Es tu HashMap propio
+        node_visit_stats = {str(k): node_visits_map[k] for k in node_visits_map}
+    else:  # Es dict plano
+        node_visit_stats = node_visits_map
+
+    node_roles = st.session_state.get("node_roles", {})
+    role_counts = {"storage": 0, "recharge": 0, "client": 0}
+    for role in node_roles.values():
+        if role in role_counts:
+            role_counts[role] += 1
+
+    # --- Botón para generar PDF ---
+    if st.button("📄 Generar Informe PDF"):
+        # Asegura que las claves de node_roles sean string
+        node_roles_str = {str(k): v for k, v in node_roles.items()}
+
+        generator = ReportGenerator(
+            stats,
+            orders,
+            clients,
+            routes,
+            node_visit_stats,
+            role_counts,
+            node_roles_str           # <-- Agrega esto para los rankings por tipo de nodo
+        )
+        filename = generator.generate_pdf("reporte.pdf")
+        with open(filename, "rb") as f:
+            st.download_button(
+                label="Descargar reporte PDF",
+                data=f,
+                file_name="reporte.pdf",
+                mime="application/pdf"
+            )
     else:
         st.info("AVL Tree not available yet.")
+
+
 
 # ------------------ TAB 5: Estadísticas generales ------------------
 with tab5:

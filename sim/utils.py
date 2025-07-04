@@ -1,0 +1,27 @@
+def safe_str(text):
+    """Convierte a str y reemplaza símbolos unicode y tildes para compatibilidad con FPDF clásico."""
+    if not isinstance(text, str):
+        text = str(text)
+    return (text
+            .replace("→", "->")
+            .replace("←", "<-")
+            .replace("–", "-")
+            .replace("—", "-")
+            .replace("°", " deg")
+            .replace("á", "a")
+            .replace("é", "e")
+            .replace("í", "i")
+            .replace("ó", "o")
+            .replace("ú", "u")
+            .replace("ñ", "n")
+            .replace("Á", "A")
+            .replace("É", "E")
+            .replace("Í", "I")
+            .replace("Ó", "O")
+            .replace("Ú", "U")
+            .replace("Ñ", "N")
+            .replace("’", "'")
+            .replace("“", '"')
+            .replace("”", '"')
+            .replace("‘", "'")
+    )

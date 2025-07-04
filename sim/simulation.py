@@ -1,8 +1,12 @@
 from collections import deque
 from domain.route import Route
-
+from sim.kruskal import kruskal_mst
+from sim.dijkstra import dijkstra_with_recharge
 
 class Simulation:
+    @staticmethod
+    def get_shortest_path(graph, start, end, autonomy, recharge_nodes):
+        return dijkstra_with_recharge(graph, start, end, autonomy, recharge_nodes)
 
     @staticmethod
     def bfs_shortest_path(graph, start, goal, autonomy_limit, recharge_nodes):
@@ -32,3 +36,7 @@ class Simulation:
                     else:
                         queue.append((neighbor, next_path, new_cost))
         return None
+    
+    @staticmethod
+    def get_mst(graph):
+        return kruskal_mst(graph)
