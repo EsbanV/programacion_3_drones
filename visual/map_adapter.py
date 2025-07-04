@@ -16,87 +16,86 @@ class MapAdapter:
         lons = [lon for lat, lon in pos.values()]
         center = [sum(lats)/len(lats), sum(lons)/len(lons)]
 
-        fmap = folium.Map(location=center, zoom_start=13, tiles="cartodbpositron")
+        fmap = folium.Map(location=center, zoom_start=13, tiles="OpenStreetMap")
 
-        # Colores y iconos por rol (usar colores válidos para folium.Icon)
-        role_colors = {
-            "storage": "orange",    # folium.Icon color: 'orange'
-            "recharge": "blue",     # folium.Icon color: 'blue'
-            "client": "green"       # folium.Icon color: 'green'
-        }
-        role_icons = {
-            "storage": "archive",    # fa-archive
-            "recharge": "bolt",      # fa-bolt
-            "client": "user"         # fa-user
+        # Colores e iconos según la imagen mostrada
+        role_config = {
+            "storage": {
+                "color": "orange",      # Naranja para Storage
+                "icon": "archive"       # Icono de archivo/almacén
+            },
+            "recharge": {
+                "color": "green",       # Verde para Recharge
+                "icon": "bolt"          # Icono de rayo/energía
+            },
+            "client": {
+                "color": "blue",        # Azul para Client
+                "icon": "user"          # Icono de usuario
+            }
         }
 
-        # Nodos diferenciados por color e icono
+        # Agregar nodos al mapa
         for n in G.nodes:
             lat, lon = pos[n]
             role = node_roles.get(n, "client")
-            # Asegura que el rol sea string y minúscula
             role_str = str(role).lower()
-            color = role_colors.get(role_str, "gray")
-            icon = role_icons.get(role_str, "info-sign")
+            
+            # Obtener configuración del rol
+            config = role_config.get(role_str, role_config["client"])
+            
             folium.Marker(
                 location=[lat, lon],
-                popup=f"{n} ({role})",
-                icon=folium.Icon(color=color, icon=icon, prefix="fa")
+                popup=f"<b>{n}</b><br>Role: {role.capitalize()}",
+                tooltip=f"{n} ({role})",
+                icon=folium.Icon(
+                    color=config["color"],
+                    icon=config["icon"]
+                )
             ).add_to(fmap)
 
-        # Aristas
+        # Agregar aristas (conexiones entre nodos)
         for u, v, data in G.edges(data=True):
-            latlngs = [pos[u], pos[v]]
+            lat1, lon1 = pos[u]
+            lat2, lon2 = pos[v]
+            
             folium.PolyLine(
-                locations=latlngs,
-                color="gray",
+                locations=[(lat1, lon1), (lat2, lon2)],
+                color="blue",
                 weight=2,
-                opacity=0.5,
-                tooltip=f"Weight: {data.get('weight', '')}"
+                opacity=0.6,
+                tooltip=f"Edge: {u} ↔ {v}"
             ).add_to(fmap)
 
-        # Ruta resaltada
+        # Agregar ruta resaltada si existe
         if route_path and len(route_path) > 1:
-            route_latlngs = []
-            for n in route_path:
-                n_str = str(n)
-                if n in pos:
-                    route_latlngs.append(pos[n])
-                elif n_str in pos:
-                    route_latlngs.append(pos[n_str])
-                else:
-                    found = False
-                    for k in pos:
-                        if str(k) == n_str:
-                            route_latlngs.append(pos[k])
-                            found = True
-                            break
-                    if not found:
-                        continue  # omite si no encuentra
-            if len(route_latlngs) > 1:
+            route_coords = []
+            for node in route_path:
+                # Buscar el nodo en pos, manejando diferentes tipos de keys
+                found_pos = None
+                for pos_key in pos:
+                    if str(pos_key) == str(node):
+                        found_pos = pos[pos_key]
+                        break
+                
+                if found_pos:
+                    route_coords.append(found_pos)
+            
+            if len(route_coords) > 1:
                 folium.PolyLine(
-                    locations=route_latlngs,
+                    locations=route_coords,
                     color="red",
-                    weight=5,
-                    opacity=0.9,
-                    tooltip="Route"
+                    weight=4,
+                    opacity=0.8,
+                    tooltip="Active Route"
                 ).add_to(fmap)
 
         return fmap
 
     @staticmethod
     def _generate_latlon_positions(G):
-        # Distribuye nodos en un área ficticia de Santiago, Chile
+        # Genera posiciones en el área de Santiago, Chile
         base_lat, base_lon = -33.45, -70.65
         delta = 0.05
-        nodes = list(G.nodes)
-        random.seed(42)
-        pos = {}
-        for i, n in enumerate(nodes):
-            lat = base_lat + random.uniform(-delta, delta)
-            lon = base_lon + random.uniform(-delta, delta)
-            pos[n] = (lat, lon)
-        return pos
         nodes = list(G.nodes)
         random.seed(42)
         pos = {}

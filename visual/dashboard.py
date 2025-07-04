@@ -365,18 +365,3 @@ with tab5:
         n_storage = len(roles["storage"])
         n_recharge = len(roles["recharge"])
         n_client = len(roles["client"])
-
-        if n_storage == 0 and n_recharge == 0 and n_client == 0:
-            st.info("No nodes to display in pie chart.")
-        else:
-            fig_pie = go.Figure(
-                go.Pie(
-                    labels=["Storage Nodes", "Recharge Nodes", "Client Nodes"],
-                    values=[n_storage, n_recharge, n_client],
-                    marker_colors=["orange", "mediumseagreen", "lightskyblue"],
-                    hole=0.3,
-                    textinfo="label+percent"
-                )
-            )
-            fig_pie.update_layout(showlegend=True)
-            st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
