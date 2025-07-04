@@ -18,6 +18,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import plotly.graph_objects as go
+import folium
+from streamlit_folium import st_folium
+from map_adapter import MapAdapter
 
 st.set_page_config(layout="wide")
 
@@ -139,43 +142,18 @@ with tab2:
         col_grafo, col_ruta = st.columns([3, 1], gap="large")
 
         with col_grafo:
+            # --- NUEVO: Mapa interactivo con folium ---
             G = NetworkAdapter.graph_to_networkx(st.session_state['graph'], st.session_state['node_roles'])
-            n_nodes = st.session_state['n_nodes']
-            spring_params = NetworkAdapter.get_spring_params(n_nodes)
-            pos = nx.spring_layout(
-                G,
-                k=spring_params["k"],
-                iterations=spring_params["iterations"],
-                scale=spring_params["scale"],
-                seed=42
-            )
-            role_colors = {"storage": "orange", "recharge": "blue", "client": "green"}
-            color_map = [role_colors[G.nodes[n]['role']] for n in G.nodes]
-            fig, ax = plt.subplots(figsize=(8, 7))
-            nx.draw(G, pos, ax=ax, node_color=color_map, with_labels=True)
-            labels = nx.get_edge_attributes(G, "weight")
-            nx.draw_networkx_edge_labels(G, pos, edge_labels=labels, ax=ax, font_size=9)
-
-            legend_elements = [
-                mpatches.Patch(color="orange", label="Storage"),
-                mpatches.Patch(color="blue", label="Recharge"),
-                mpatches.Patch(color="green", label="Client")
-            ]
-            ax.legend(handles=legend_elements, loc="best", title="Node Roles")
-            # --- Dibuja la ruta si existe ---
+            node_roles = st.session_state['node_roles']
             route_path = st.session_state.get('last_route_path')
-            if route_path and len(route_path) > 1:
-                path_edges = list(zip(route_path, route_path[1:]))
-                path_edges_str = [(str(u), str(v)) for u, v in path_edges]
-                nx.draw_networkx_edges(
-                    G,
-                    pos,
-                    edgelist=path_edges_str,
-                    ax=ax,
-                    edge_color="red",
-                    width=3
-                )
-            st.pyplot(fig)
+            # Genera el mapa interactivo usando MapAdapter
+            fmap = MapAdapter.network_to_folium(
+                G,
+                node_roles,
+                route_path=route_path
+            )
+            st_data = st_folium(fmap, width=700, height=500)
+            # --- Fin NUEVO ---
 
         with col_ruta:
             st.markdown("### 📌 Calculate Route")
@@ -361,6 +339,27 @@ with tab5:
                 fig3.update_layout(xaxis_title="Storage Node", yaxis_title="Visits", showlegend=False)
                 st.plotly_chart(fig3, use_container_width=True, key="storage_bar")
 
+        # --- Pie chart de proporciones ---
+        st.markdown("### 🥧 Node Role Proportion")
+        n_storage = len(roles["storage"])
+        n_recharge = len(roles["recharge"])
+        n_client = len(roles["client"])
+
+        if n_storage == 0 and n_recharge == 0 and n_client == 0:
+            st.info("No nodes to display in pie chart.")
+        else:
+            fig_pie = go.Figure(
+                go.Pie(
+                    labels=["Storage Nodes", "Recharge Nodes", "Client Nodes"],
+                    values=[n_storage, n_recharge, n_client],
+                    marker_colors=["orange", "mediumseagreen", "lightskyblue"],
+                    hole=0.3,
+                    textinfo="label+percent"
+                )
+            )
+            fig_pie.update_layout(showlegend=True)
+            # Usa una sola vez el key="roles_pie" y elimina duplicados
+            st.plotly_chart(fig_pie, use_container_width=True, key="roles_pie")
         # --- Pie chart de proporciones ---
         st.markdown("### 🥧 Node Role Proportion")
         n_storage = len(roles["storage"])
