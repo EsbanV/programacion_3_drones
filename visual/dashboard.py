@@ -22,8 +22,9 @@ import folium
 from visual.report_generator import ReportGenerator
 from visual.map.map_adapter import MapAdapter
 from streamlit_folium import st_folium
-from sim.kruskal import kruskal_mst  # Asegúrate de tenerlo implementado como antes
+from sim.kruskal import kruskal_mst
 from api.main import sync_state_from_streamlit 
+import pickle
 
 st.set_page_config(layout="wide")
 
@@ -34,6 +35,29 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Route Analytics",
     "General Statistics"
 ])
+
+def refresh_from_api():
+    from tda.avl import AVL
+    from tda.hash_map import Map
+    from domain.client import Client
+    from domain.order import Order
+
+    STATE_FILE = "api_sim_state.pickle"
+    if not os.path.exists(STATE_FILE):
+        return  # o puedes poner un st.warning aquí
+
+    with open(STATE_FILE, "rb") as f:
+        state = pickle.load(f)
+
+    # Sobrescribe el session_state relevante:
+    st.session_state['clients'] = state.get("clients", [])
+    st.session_state['orders'] = state.get("orders", [])
+    st.session_state['routes_avl'] = state.get("routes_avl", AVL())
+    st.session_state['node_visits'] = state.get("node_visits", Map())
+    st.session_state['node_roles'] = state.get("node_roles", {})
+    st.session_state['n_nodes'] = state.get("n_nodes", 0)
+    st.session_state['m_edges'] = state.get("m_edges", 0)
+    st.session_state['n_orders'] = state.get("n_orders", 0)
 
 # ------------------ TAB 1: Configuración y generación de simulación ------------------
 with tab1:
@@ -208,7 +232,7 @@ with tab2:
                 if path and len(path) > 1:
                     st.session_state['last_route_path'] = path
                     st.success(f"Route found: {[str(v) for v in path]} (Cost: {cost})")
-                    # Aquí actualizas los rankings y la AVL, etc.
+                    # Actualiza rankings y AVL:
                     route_key = " → ".join(str(v) for v in path)
                     st.session_state['routes_avl'].insert(route_key)
                     visits = st.session_state['node_visits']
@@ -218,24 +242,12 @@ with tab2:
                             visits[v_str] += 1
                         else:
                             visits[v_str] = 1
+                    # ---- SINCRONIZA ESTADO CON LA API ----
+                    sync_state_from_streamlit()
                 else:
                     st.error("No route found (autonomy or recharge limit reached).")
                 st.rerun()
 
-                if route:
-                    st.session_state['last_route_path'] = route.path
-                    st.success(f"Route found: {route.path} (Cost: {route.cost})")
-                    route_key = " → ".join(str(v) for v in route.path)
-                    st.session_state['routes_avl'].insert(route_key)
-                    # Usar Map aquí para las visitas:
-                    visits = st.session_state['node_visits']
-                    for v in route.path:
-                        v_str = str(v)
-                        if v_str in visits:
-                            visits[v_str] += 1
-                        else:
-                            visits[v_str] = 1
-                st.rerun()
 
             st.markdown("### 🌲 Árbol de Expansión Mínima (MST)")
 
@@ -268,7 +280,12 @@ with tab2:
 
 # ------------------ TAB 3: Visualización de clientes y órdenes ------------------
 with tab3:
+
     st.write("### Clients")
+    if st.button("🔄 Refresh from API"):
+        refresh_from_api()
+        st.rerun()
+
     if 'clients' in st.session_state:
         clients_list = [c.to_dict() for c in st.session_state['clients']]
         st.json(clients_list, expanded=False)

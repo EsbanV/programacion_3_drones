@@ -122,12 +122,16 @@ def visits_clients():
         raise HTTPException(status_code=400, detail="No simulation active.")
     node_roles = state["node_roles"]
     visits = state["node_visits"]
-    result = [
-        (str(n), visits[n])
-        for n in visits
-        if node_roles.get(n) == "client"
-    ]
-    return sorted(result, key=lambda x: -x[1])
+
+    result = []
+    for n in visits.keys():
+        n_str = str(n)
+        try:
+            if node_roles.get(n_str) == "client" and visits[n_str] is not None:
+                result.append([n_str, visits[n_str]])
+        except Exception:
+            continue  # Ignora cualquier KeyError u otro error puntual
+    return {"clients": sorted(result, key=lambda x: -x[1])}
 
 @app.get("/info/reports/visits/recharges")
 def visits_recharges():
@@ -136,12 +140,16 @@ def visits_recharges():
         raise HTTPException(status_code=400, detail="No simulation active.")
     node_roles = state["node_roles"]
     visits = state["node_visits"]
-    result = [
-        (str(n), visits[n])
-        for n in visits
-        if node_roles.get(n) == "recharge"
-    ]
-    return sorted(result, key=lambda x: -x[1])
+
+    result = []
+    for n in visits.keys():
+        n_str = str(n)
+        try:
+            if node_roles.get(n_str) == "recharge" and visits[n_str] is not None:
+                result.append([n_str, visits[n_str]])
+        except Exception:
+            continue
+    return {"recharges": sorted(result, key=lambda x: -x[1])}
 
 @app.get("/info/reports/visits/storages")
 def visits_storages():
@@ -150,12 +158,16 @@ def visits_storages():
         raise HTTPException(status_code=400, detail="No simulation active.")
     node_roles = state["node_roles"]
     visits = state["node_visits"]
-    result = [
-        (str(n), visits[n])
-        for n in visits
-        if node_roles.get(n) == "storage"
-    ]
-    return sorted(result, key=lambda x: -x[1])
+
+    result = []
+    for n in visits.keys():
+        n_str = str(n)
+        try:
+            if node_roles.get(n_str) == "storage" and visits[n_str] is not None:
+                result.append([n_str, visits[n_str]])
+        except Exception:
+            continue
+    return {"storages": sorted(result, key=lambda x: -x[1])}
 
 @app.get("/info/reports/summary")
 def summary():
